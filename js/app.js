@@ -677,7 +677,7 @@ document.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const email = f.email.value.trim(); const btn = f.querySelector("button"); btn.disabled = true;
   const { error } = await S.store.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-  if (error) { S.loginError = /rate/i.test(error.message) ? "Pediste varios links seguidos. Esperá un minuto y probá de nuevo." : "No se pudo enviar el link. Revisá el mail e intentá de nuevo."; btn.disabled = false; }
+  if (error) { S.loginError = error.code === "email_address_not_authorized" ? "Todavía no podemos enviar mails a esta dirección. Pedile acceso a quien administra la herramienta." : /rate/i.test(error.message) || error.code === "over_email_send_rate_limit" ? "Se enviaron muchos links seguidos. Esperá unos minutos y probá de nuevo." : "No se pudo enviar el link. Revisá el mail e intentá de nuevo."; btn.disabled = false; }
   else { S.loginSent = email; S.loginError = null; }
   render();
 });
