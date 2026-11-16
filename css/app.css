@@ -62,7 +62,7 @@ textarea { field-sizing: content; }
 .c-evidencia { color: var(--evidencia); background: var(--evidencia-soft); } .c-decision { color: var(--decision); background: var(--decision-soft); }
 label.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
 label.f small { font-weight: 400; color: var(--ink-3); }
-input[type=text], input[type=date], input[type=number], select, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 400; font-size: 14px; }
+input[type=text], input[type=email], input[type=date], input[type=number], select, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 400; font-size: 14px; }
 textarea { resize: vertical; min-height: 72px; line-height: 1.45; }
 input:focus, select:focus, textarea:focus { outline: 2px solid rgba(30,77,59,.35); outline-offset: 0; border-color: var(--brand); }
 input[readonly], textarea[readonly] { background: var(--paper); color: var(--ink-2); }
