@@ -82,7 +82,110 @@ function deepMerge(a, b) {
   return out;
 }
 
+class SupabaseStore {
+  constructor(sb, user) { this.sb = sb; this.user = user; this.kind = "supabase"; this.q = makeQueue(); this.owned = new Set(); }
+  pid(path) { return path.split("/")[1]; }
+  query(path) {
+    let q = this.sb.from("docs").select("path,data");
+    if (path === "projects") return q.like("path", "projects/%").not("path", "like", "projects/%/%");
+    if (isCollection(path)) {
+      const n = segs(path) + 1;
+      return { n, q: q.eq("project_id", this.pid(path)).like("path", path + "/%") };
+    }
+    return q.eq("path", path);
+  }
+  listen(path, cb, onError) {
+    let alive = true, timer = null;
+    const fetchNow = async () => {
+      const built = this.query(path);
+      const { data, error } = await (built.q || built);
+      if (!alive) return;
+      if (error) { onError && onError({ code: "unavailable", message: error.message }); return; }
+      const n = built.n;
+      const rows = (data || []).filter((r) => !n || segs(r.path) === n);
+      if (isCollection(path)) cb(rows.map((r) => ({ id: r.path.split("/").pop(), ...r.data })), { fromCache: false });
+      else cb(rows[0] ? { id: rows[0].path.split("/").pop(), ...rows[0].data } : null, { fromCache: false });
+    };
+    const kick = () => { clearTimeout(timer); timer = setTimeout(fetchNow, 120); };
+    const filter = path === "projects" ? undefined : `project_id=eq.${this.pid(path)}`;
+    const ch = this.sb.channel("w-" + path + "-" + Math.random().toString(36).slice(2))
+      .on("postgres_changes", { event: "*", schema: "public", table: "docs", ...(filter ? { filter } : {}) }, kick)
+      .subscribe();
+    fetchNow();
+    return () => { alive = false; clearTimeout(timer); this.sb.removeChannel(ch); };
+  }
+  async ensureOwner(pid) {
+    if (this.owned.has(pid)) return;
+    const { error } = await this.sb.from("project_members").insert({ project_id: pid, email: this.user.email.toLowerCase(), role: "owner" });
+    if (error && error.code !== "23505" && !/row-level security/i.test(error.message)) throw { code: "invalid_argument", message: error.message };
+    this.owned.add(pid);
+  }
+  async write(path, data) {
+    if (path.startsWith("projects/") && segs(path) === 2) {
+      const { data: existing } = await this.sb.from("docs").select("path").eq("path", path).maybeSingle();
+      if (!existing) await this.ensureOwner(this.pid(path));
+    }
+    const { error } = await this.sb.from("docs").upsert({ path, project_id: this.pid(path), data: clean(data), updated_at: new Date().toISOString() });
+    if (error) throw { code: /row-level security|permission/i.test(error.message) ? "invalid_argument" : "unavailable", message: error.message };
+  }
+  set(path, data) { return this.q(path, () => this.write(path, data)); }
+  update(path, data) {
+    return this.q(path, async () => {
+      const { data: row, error } = await this.sb.from("docs").select("data").eq("path", path).maybeSingle();
+      if (error) throw { code: "unavailable", message: error.message };
+      if (!row) throw { code: "invalid_argument", message: "no existe" };
+      await this.write(path, deepMerge(row.data || {}, clean(data)));
+    });
+  }
+  async add(coll, data) { const id = newId(); await this.set(`${coll}/${id}`, data); return id; }
+  remove(path) { return this.q(path, async () => { const { error } = await this.sb.from("docs").delete().eq("path", path); if (error) throw { code: "invalid_argument", message: error.message }; }); }
+  // Miembros del proyecto
+  async members(pid) { const { data } = await this.sb.from("project_members").select("email,role").eq("project_id", pid).order("created_at"); return data || []; }
+  async addMember(pid, email) { const { error } = await this.sb.from("project_members").insert({ project_id: pid, email: email.trim().toLowerCase(), role: "editor" }); if (error && error.code !== "23505") throw { code: "invalid_argument", message: error.message }; }
+  async removeMember(pid, email) { const { error } = await this.sb.from("project_members").delete().eq("project_id", pid).eq("email", email); if (error) throw { code: "invalid_argument", message: error.message }; }
+}
+
+// ---------- Supabase: cliente, sesión y coach ----------
+let sbClient = null;
+export async function supabaseClient() {
+  if (sbClient) return sbClient;
+  const { SUPABASE_URL, SUPABASE_KEY } = await import("./config.js");
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+  sbClient = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, detectSessionInUrl: true, flowType: "pkce" } });
+  return sbClient;
+}
+
+// Adaptador con la misma forma que la capacidad `sample` de Claude: sample.json(prompt, {modelTier, signal})
+export function supabaseSample(sb) {
+  const call = async (prompt, opts = {}) => {
+    const { data, error } = await sb.functions.invoke("coach", { body: { prompt, tier: opts.modelTier || "default" } });
+    if (opts.signal?.aborted) throw { code: "cancelled" };
+    if (error) {
+      let code = "upstream_error";
+      try { const b = await error.context.json(); code = b.code || code; } catch {}
+      throw { code, message: error.message };
+    }
+    return { text: data?.text || "", truncated: false };
+  };
+  const fn = (prompt, opts) => call(prompt, opts);
+  fn.json = async (prompt, opts) => {
+    const { text } = await call(prompt, opts);
+    const t = text.trim();
+    const tries = [t, (t.match(/```(?:json)?\s*([\s\S]*?)```/) || [])[1], t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)];
+    for (const x of tries) { if (!x) continue; try { return JSON.parse(x); } catch {} }
+    throw { code: "invalid_json", text };
+  };
+  return fn;
+}
+
 export async function createStore() {
+  const sb = await supabaseClient();
+  if (sb) {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return { kind: "auth", sb };
+    return new SupabaseStore(sb, session.user);
+  }
   const c = globalThis.claude;
   if (c && typeof c.use === "function") {
     try {

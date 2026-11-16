@@ -1,5 +1,5 @@
 import { CELLS, RISKS, STATUSES, LEVELS, DECISIONS, STAGES, FICHAS, BUILD_ORDER, MINDSET } from "./content.js";
-import { createStore, getCapability, newId } from "./store.js";
+import { createStore, getCapability, newId, supabaseSample } from "./store.js";
 import { MODES, runCoach, coachErrorCopy, HIDE_CODES } from "./coach.js";
 import { seedExample } from "./seed.js";
 
@@ -126,6 +126,7 @@ document.addEventListener("focusout", () => setTimeout(() => {
 
 function render() {
   const root = $("#app");
+  if (S.store?.kind === "auth") { root.innerHTML = loginView(); return; }
   if (!S.store) { root.innerHTML = `<div class="loading">${S.storeFailed ? "Iniciá sesión en Claude para usar el playbook: los proyectos se guardan en tu cuenta." : "Cargando…"}</div>`; return; }
   const scrollY = window.scrollY;
   root.innerHTML = S.pid ? projectShell() : projectsView();
@@ -135,6 +136,16 @@ function render() {
 }
 function autosize(scope = document) { scope.querySelectorAll('textarea').forEach((t) => { if (CSS.supports?.('field-sizing', 'content')) return; t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px'; }); }
 document.addEventListener('input', (e) => { if (e.target.tagName === 'TEXTAREA' && !CSS.supports?.('field-sizing', 'content')) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 2 + 'px'; } });
+
+function loginView() {
+  return `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px"><div class="card stack" style="max-width:440px;width:100%;padding:32px">
+  <div class="brand" style="padding:0"><b>Lean Canvas</b><span>Playbook · Ultreia</span></div>
+  <h1 style="font-size:30px;margin:8px 0 0">Convertí una idea en decisiones respaldadas por evidencia</h1>
+  ${S.loginSent ? `<div class="banner c-evidencia">Te mandamos un link a <b>${esc(S.loginSent)}</b>. Abrilo desde este mismo navegador para entrar.</div><button class="btn ghost" data-act="login-reset">Usar otro mail</button>`
+  : `<p class="muted" style="margin:0">Ingresá tu mail y te mandamos un link para entrar. No hace falta contraseña.</p>
+  <form class="stack" data-form="login"><label class="f">Mail<input type="email" name="email" required autocomplete="email" placeholder="nombre@empresa.com"></label><button class="btn primary" type="submit">Enviarme el link</button></form>`}
+  ${S.loginError ? `<div class="banner c-decision">${esc(S.loginError)}</div>` : ""}</div></div>`;
+}
 
 function sidebar() {
   const pr = ready() ? progress() : null;
@@ -153,7 +164,9 @@ function sidebar() {
     ${item("experimentos", "Experimentos", "test", "")}
     ${item("aprendizajes", "Iteración", "refresh", "05")}
     ${item("plan", "Plan de acción", "flag", "06")}
+    ${S.store.kind === "supabase" ? `<button class="nav" data-act="share">${icon("folder")}<span>Compartir proyecto</span></button>` : ""}
     <div class="spacer"></div>
+    ${S.store.kind === "supabase" ? `<div class="small muted" style="padding:8px 10px">${esc(S.email || "")} · <a href="#" data-act="logout">Salir</a></div>` : ""}
     ${ready() && S.P.project ? `<div class="status-card"><b>${esc(S.P.project.name)} · ${esc(currentVersion()?.label || "v0")}</b>${H.length} hipótesis · ${val} validadas<div class="bar"><i style="width:${pr ? Math.round((pr.count / 6) * 100) : 0}%"></i></div></div>` : ""}
   </nav>`;
 }
@@ -178,7 +191,7 @@ function projectsView() {
         <span class="kicker">${p.example ? "Ejemplo · datos simulados" : "Proyecto"}</span>
         <span class="name">${esc(p.name)}</span><span class="muted small">${esc((p.idea || "Sin idea formulada todavía").slice(0, 160))}</span>
         <span class="small muted" style="margin-top:auto">Actualizado ${fmtDate(p.updatedAt)}</span></a>`).join("")}</div>`;
-  return `<div class="app"><nav class="side"><div class="brand"><b>Lean Canvas</b><span>Playbook · Ultreia</span></div><a class="nav on" href="#inicio">${icon("folder")}<span>Mis proyectos</span></a><div class="spacer"></div><div class="status-card"><b>Cómo funciona</b>Cada proyecto guarda su Canvas con versiones, hipótesis, experimentos y aprendizajes. ${S.store.kind === "local" ? "Modo local: los datos quedan solo en este navegador." : "Los datos se comparten con tu equipo."}</div></nav>
+  return `<div class="app"><nav class="side"><div class="brand"><b>Lean Canvas</b><span>Playbook · Ultreia</span></div><a class="nav on" href="#inicio">${icon("folder")}<span>Mis proyectos</span></a><div class="spacer"></div>${S.store.kind === "supabase" ? `<div class="small muted" style="padding:8px 10px">${esc(S.email || "")} · <a href="#" data-act="logout">Salir</a></div>` : ""}<div class="status-card"><b>Cómo funciona</b>Cada proyecto guarda su Canvas con versiones, hipótesis, experimentos y aprendizajes. ${S.store.kind === "local" ? "Modo local: los datos quedan solo en este navegador." : S.store.kind === "supabase" ? "Cada proyecto lo ven solo las personas que invitás." : "Los datos se comparten con tu equipo."}</div></nav>
   <main><div class="head"><div><span class="kicker">Playbook metodológico · 6 etapas</span><h1>Convertí una idea en decisiones respaldadas por evidencia</h1><p class="lead">El Lean Canvas es el medio, no el entregable. Construí tu modelo, cuestioná cada supuesto y terminá con experimentos, responsables y fechas.</p></div>
   ${list.length ? `<div class="btns"><button class="btn" data-act="seed">Agregar el ejemplo TurnoClaro</button><button class="btn primary" data-act="new-project">Nuevo proyecto</button></div>` : ""}</div>${body}</main></div>`;
 }
@@ -457,6 +470,11 @@ function renderModal(keep) {
 const val = (m, k, d = "") => (m.draft && m.draft[k] !== undefined ? m.draft[k] : d);
 
 const MODAL = {
+  share: (m) => `<h2>Compartir proyecto</h2><p class="muted small" style="margin:0">Las personas que agregues entran con su mail (sin cuenta de Claude) y pueden editar el proyecto. Solo el dueño agrega o quita personas.</p>
+    ${m.members ? `<table class="t"><tbody>${m.members.map((x) => `<tr><td>${esc(x.email)}</td><td class="muted small">${x.role === "owner" ? "Dueño" : "Puede editar"}</td><td style="text-align:right">${x.role !== "owner" ? `<button class="btn sm ghost danger" data-act="member-remove" data-email="${esc(x.email)}">Quitar</button>` : ""}</td></tr>`).join("")}</tbody></table>` : `<div class="loading" style="padding:20px">Cargando…</div>`}
+    <div class="btns"><input type="email" name="newEmail" placeholder="mail@empresa.com" style="flex:1;min-width:220px"><button class="btn primary" data-act="member-add">Agregar</button></div>
+    <span class="small muted">Enviales el link de la herramienta: al entrar con ese mail van a ver el proyecto.</span>
+    <div class="btns"><button class="btn ghost" data-act="close">Cerrar</button></div>`,
   project: (m) => `<h2>Nuevo proyecto</h2><label class="f">Nombre<input type="text" name="name" autofocus value="${esc(val(m, "name"))}" placeholder="Ej.: TurnoClaro"></label>
     <label class="f">Idea en una oración<small>Ayudamos a [quién] a resolver [qué problema] mediante [cómo]. Podés completarla después.</small><textarea name="idea">${esc(val(m, "idea"))}</textarea></label>
     <div class="btns"><button class="btn primary" data-act="save-project">Crear proyecto</button><button class="btn ghost" data-act="close">Cancelar</button></div>`,
@@ -505,6 +523,16 @@ function nextCode(prefix, list) { const n = Math.max(0, ...list.map((x) => Numbe
 
 // ---------- acciones ----------
 const ACT = {
+  share: async () => { openModal({ type: "share", members: null }); try { S.modal.members = await S.store.members(S.pid); } catch { S.modal.members = []; } renderModal(); },
+  "member-add": async () => {
+    const email = ($(".modal [name=newEmail]")?.value || "").trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast("Escribí un mail válido.");
+    try { await S.store.addMember(S.pid, email); S.modal.members = await S.store.members(S.pid); renderModal(); toast("Persona agregada."); }
+    catch { toast("Solo el dueño del proyecto puede agregar personas."); }
+  },
+  "member-remove": async (el) => { try { await S.store.removeMember(S.pid, el.dataset.email); S.modal.members = await S.store.members(S.pid); renderModal(); } catch { toast("Solo el dueño puede quitar personas."); } },
+  logout: async () => { await S.store.sb.auth.signOut(); location.hash = ""; location.reload(); },
+  "login-reset": () => { S.loginSent = null; S.loginError = null; render(); },
   "new-project": () => openModal({ type: "project" }),
   close: () => closeModal(),
   "save-project": async () => {
@@ -644,6 +672,16 @@ document.addEventListener("change", (ev) => {
   if (el.matches("[data-block],[data-field],[data-plan],[data-phase]")) saveField(el);
 });
 
+document.addEventListener("submit", async (ev) => {
+  const f = ev.target.closest("[data-form=login]"); if (!f) return;
+  ev.preventDefault();
+  const email = f.email.value.trim(); const btn = f.querySelector("button"); btn.disabled = true;
+  const { error } = await S.store.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+  if (error) { S.loginError = /rate/i.test(error.message) ? "Pediste varios links seguidos. Esperá un minuto y probá de nuevo." : "No se pudo enviar el link. Revisá el mail e intentá de nuevo."; btn.disabled = false; }
+  else { S.loginSent = email; S.loginError = null; }
+  render();
+});
+
 window.addEventListener("hashchange", route);
 function route() {
   const r = parseRoute();
@@ -658,11 +696,24 @@ function route() {
   render();
   S.store = await createStore();
   if (!S.store) { S.storeFailed = true; render(); return; }
-  const user = await getCapability("user");
-  try { S.uid = user ? await user.id() : null; } catch { S.uid = null; }
+  if (S.store.kind === "auth") {
+    S.store.sb.auth.onAuthStateChange((ev, session) => { if (session) location.reload(); });
+    render(); return;
+  }
+  if (S.store.kind === "supabase") {
+    S.uid = S.store.user.id; S.email = S.store.user.email;
+    S.sample = supabaseSample(S.store.sb);
+    S.downloads = { save: async ({ filename, data }) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type: "text/markdown" })); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return { status: "saved" }; } };
+    S.store.sb.auth.onAuthStateChange((ev) => { if (ev === "SIGNED_OUT") location.reload(); });
+  } else {
+    const user = await getCapability("user");
+    try { S.uid = user ? await user.id() : null; } catch { S.uid = null; }
+  }
   S.unsubProjects = S.store.listen("projects", (list) => { S.projects = list; if (!S.pid) scheduleRender(); }, () => { S.projectsErr = true; render(); });
   route();
-  getCapability("sample").then((s) => { S.sample = s || globalThis.__mockSample || null; if (S.sample) scheduleRender(); });
-  getCapability("downloads").then((d) => { S.downloads = d; if (d) scheduleRender(); });
+  if (S.store.kind !== "supabase") {
+    getCapability("sample").then((s) => { S.sample = s || globalThis.__mockSample || null; if (S.sample) scheduleRender(); });
+    getCapability("downloads").then((d) => { S.downloads = d; if (d) scheduleRender(); });
+  }
   if (globalThis.__mockSample) { S.sample = globalThis.__mockSample; }
 })();
