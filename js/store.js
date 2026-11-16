@@ -151,8 +151,10 @@ export async function supabaseClient() {
   if (sbClient) return sbClient;
   const { SUPABASE_URL, SUPABASE_KEY } = await import("./config.js");
   if (!SUPABASE_URL || !SUPABASE_KEY) return null;
-  const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
-  sbClient = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, detectSessionInUrl: true, flowType: "pkce" } });
+  if (!globalThis.supabase?.createClient) {
+    await new Promise((ok, fail) => { const t = document.createElement("script"); t.src = new URL("../vendor/supabase.js", import.meta.url).href; t.onload = ok; t.onerror = fail; document.head.appendChild(t); });
+  }
+  sbClient = globalThis.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, detectSessionInUrl: true, flowType: "pkce" } });
   return sbClient;
 }
 

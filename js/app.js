@@ -127,7 +127,7 @@ document.addEventListener("focusout", () => setTimeout(() => {
 function render() {
   const root = $("#app");
   if (S.store?.kind === "auth") { root.innerHTML = loginView(); return; }
-  if (!S.store) { root.innerHTML = `<div class="loading">${S.storeFailed ? "Iniciá sesión en Claude para usar el playbook: los proyectos se guardan en tu cuenta." : "Cargando…"}</div>`; return; }
+  if (!S.store) { root.innerHTML = `<div class="loading">${S.storeFailed ? "No se pudo conectar con el servidor. Revisá tu conexión y recargá la página." : "Cargando…"}</div>`; return; }
   const scrollY = window.scrollY;
   root.innerHTML = S.pid ? projectShell() : projectsView();
   renderModal();
@@ -694,7 +694,7 @@ function route() {
 // ---------- arranque ----------
 (async function init() {
   render();
-  S.store = await createStore();
+  try { S.store = await createStore(); } catch { S.store = null; }
   if (!S.store) { S.storeFailed = true; render(); return; }
   if (S.store.kind === "auth") {
     S.store.sb.auth.onAuthStateChange((ev, session) => { if (session) location.reload(); });
