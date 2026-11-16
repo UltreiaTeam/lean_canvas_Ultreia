@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
   if (!prompt || prompt.length > 60000) return json({ code: "invalid_request" }, 400);
 
   const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: used, error: usageError } = await admin.rpc("bump_coach_usage", { uid: user.id });
+  const { data: used, error: usageError } = await admin.rpc("coach_bump", { uid: user.id });
   if (usageError) return json({ code: "upstream_error" }, 500);
   if (Number(used) > DAILY_LIMIT) return json({ code: "rate_limited", message: "Límite diario del coach alcanzado" }, 429);
 

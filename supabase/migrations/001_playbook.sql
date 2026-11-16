@@ -30,7 +30,7 @@ alter table public.project_members enable row level security;
 alter table public.coach_usage enable row level security;
 
 create or replace function public.current_email() returns text
-language sql stable as $$ select lower(coalesce(auth.jwt() ->> 'email', '')) $$;
+language sql stable set search_path = public as $$ select lower(coalesce(auth.jwt() ->> 'email', '')) $$;
 
 create or replace function public.is_member(pid text) returns boolean
 language sql stable security definer set search_path = public as $$
@@ -70,6 +70,32 @@ language sql security definer set search_path = public as $$
   returning count
 $$;
 revoke all on function public.bump_coach_usage(uuid) from public, anon, authenticated;
+revoke all on function public.is_member(text) from anon;
+revoke all on function public.is_owner(text) from anon;
+revoke all on function public.project_is_new(text) from anon;
 
 -- tiempo real
 alter publication supabase_realtime add table public.docs;
+
+-- Las funciones auxiliares viven en un esquema privado (no expuesto por la API)
+create schema if not exists private;
+grant usage on schema private to authenticated, service_role;
+alter function public.current_email() set schema private;
+alter function public.is_member(text) set schema private;
+alter function public.is_owner(text) set schema private;
+alter function public.project_is_new(text) set schema private;
+alter function private.is_member(text) set search_path = public, private;
+alter function private.is_owner(text) set search_path = public, private;
+alter function private.project_is_new(text) set search_path = public, private;
+revoke all on function private.current_email(), private.is_member(text), private.is_owner(text), private.project_is_new(text) from public, anon;
+grant execute on function private.current_email(), private.is_member(text), private.is_owner(text), private.project_is_new(text) to authenticated;
+alter function public.bump_coach_usage(uuid) set schema private;
+revoke all on function private.bump_coach_usage(uuid) from public, anon, authenticated;
+grant execute on function private.bump_coach_usage(uuid) to service_role;
+create policy coach_usage_none on public.coach_usage for select to authenticated using (false);
+
+-- Punto de entrada para la función del coach (solo service_role)
+create or replace function public.coach_bump(uid uuid) returns int
+language sql security invoker set search_path = public, private as $$ select private.bump_coach_usage(uid) $$;
+revoke all on function public.coach_bump(uuid) from public, anon, authenticated;
+grant execute on function public.coach_bump(uuid) to service_role;
