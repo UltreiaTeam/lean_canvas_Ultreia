@@ -1,6 +1,11 @@
 # Lean Canvas Playbook — Ultreia
 
-Herramienta para construir, cuestionar y validar un modelo de negocio con el Lean Canvas. Corre como **artifact de Claude**: los proyectos se guardan en la base de datos del artifact y el **coach con IA** usa la cuenta de Claude de quien lo está usando.
+Herramienta para construir, cuestionar y validar un modelo de negocio con el Lean Canvas. Es una web estática publicada con **GitHub Pages**. No hace falta cuenta de Claude:
+
+- **Datos y acceso:** viven en **Supabase**. Se entra con el mail, mediante un link mágico, y cada proyecto lo ven solo las personas invitadas.
+- **Coach con IA:** usa la **API de Anthropic** a través de una función de Supabase. La clave queda en el servidor y nunca llega al navegador.
+
+El mismo código también corre como artifact de Claude, si `js/config.js` queda vacío, y en modo local, con los datos guardados en el navegador.
 
 ## Qué hace
 
@@ -57,7 +62,20 @@ Hay tres reglas de negocio que el código hace cumplir:
 - **Una Learning Card actualiza el estado de las hipótesis vinculadas.**
 - **Las versiones anteriores del Canvas son de solo lectura.**
 
-## Capacidades del artifact
+## Puesta en marcha (web)
+
+1. **Base de datos.** Aplicar `supabase/migrations/001_playbook.sql` en el proyecto de Supabase.
+2. **Coach.** Desplegar la función `supabase/functions/coach` y cargar el secreto `ANTHROPIC_API_KEY`. Hay un secreto opcional, `COACH_DAILY_LIMIT`, que fija cuántas consultas diarias puede hacer cada usuario (60 por defecto).
+3. **Conexión.** Completar `SUPABASE_URL` y `SUPABASE_KEY` (la clave publicable) en `js/config.js`.
+4. **Acceso.** En Supabase, ir a Authentication → URL Configuration. Poner la URL de GitHub Pages como **Site URL** y agregarla en **Redirect URLs**.
+5. **Publicación.** En GitHub, ir a Settings → Pages → Deploy from a branch y elegir `main` con la carpeta `/ (root)`.
+
+### Acceso a los datos
+
+- **Quién ve un proyecto:** cada proyecto tiene una lista de miembros, `project_members`. Las políticas de seguridad de la base solo dejan leer y escribir a quienes están en esa lista.
+- **Quién lo administra:** quien crea un proyecto queda como dueño y es el único que puede agregar o quitar personas.
+
+## Capacidades del artifact (modo Claude)
 
 `db` y `user` guardan y comparten los proyectos; `sample` hace funcionar el coach; `downloads` exporta el resumen en `.md`.
 
