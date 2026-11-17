@@ -138,13 +138,18 @@ function autosize(scope = document) { scope.querySelectorAll('textarea').forEach
 document.addEventListener('input', (e) => { if (e.target.tagName === 'TEXTAREA' && !CSS.supports?.('field-sizing', 'content')) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 2 + 'px'; } });
 
 function loginView() {
+  const signup = S.authMode === "signup";
+  const invited = /^#invitar-/.test(location.hash);
   return `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px"><div class="card stack" style="max-width:440px;width:100%;padding:32px">
   <div class="brand" style="padding:0"><b>Lean Canvas</b><span>Playbook · Ultreia</span></div>
   <h1 style="font-size:30px;margin:8px 0 0">Convertí una idea en decisiones respaldadas por evidencia</h1>
-  ${S.loginSent ? `<div class="banner c-evidencia">Te mandamos un link a <b>${esc(S.loginSent)}</b>. Abrilo desde este mismo navegador para entrar.</div><button class="btn ghost" data-act="login-reset">Usar otro mail</button>`
-  : `<p class="muted" style="margin:0">Ingresá tu mail y te mandamos un link para entrar. No hace falta contraseña.</p>
-  <form class="stack" data-form="login"><label class="f">Mail<input type="email" name="email" required autocomplete="email" placeholder="nombre@empresa.com"></label><button class="btn primary" type="submit">Enviarme el link</button></form>`}
-  ${S.loginError ? `<div class="banner c-decision">${esc(S.loginError)}</div>` : ""}</div></div>`;
+  ${invited ? `<div class="banner c-evidencia">Te invitaron a un proyecto. ${signup ? "Creá tu cuenta" : "Entrá o creá tu cuenta"} y lo vas a ver en tu lista.</div>` : ""}
+  <p class="muted" style="margin:0">${signup ? "Creá tu cuenta con tu mail y una contraseña de al menos 8 caracteres." : "Entrá con tu mail y tu contraseña."}</p>
+  <form class="stack" data-form="login"><label class="f">Mail<input type="email" name="email" required autocomplete="email" placeholder="nombre@empresa.com"></label>
+  <label class="f">Contraseña<input type="password" name="password" required minlength="8" autocomplete="${signup ? "new-password" : "current-password"}"></label>
+  <button class="btn primary" type="submit">${signup ? "Crear cuenta" : "Entrar"}</button></form>
+  ${S.loginError ? `<div class="banner c-decision">${esc(S.loginError)}</div>` : ""}
+  <span class="small muted">${signup ? `¿Ya tenés cuenta? <a href="#" data-act="auth-mode" data-mode="login">Entrá</a>` : `¿Primera vez? <a href="#" data-act="auth-mode" data-mode="signup">Creá tu cuenta</a>`}</span></div></div>`;
 }
 
 function sidebar() {
@@ -470,10 +475,10 @@ function renderModal(keep) {
 const val = (m, k, d = "") => (m.draft && m.draft[k] !== undefined ? m.draft[k] : d);
 
 const MODAL = {
-  share: (m) => `<h2>Compartir proyecto</h2><p class="muted small" style="margin:0">Las personas que agregues entran con su mail (sin cuenta de Claude) y pueden editar el proyecto. Solo el dueño agrega o quita personas.</p>
-    ${m.members ? `<table class="t"><tbody>${m.members.map((x) => `<tr><td>${esc(x.email)}</td><td class="muted small">${x.role === "owner" ? "Dueño" : "Puede editar"}</td><td style="text-align:right">${x.role !== "owner" ? `<button class="btn sm ghost danger" data-act="member-remove" data-email="${esc(x.email)}">Quitar</button>` : ""}</td></tr>`).join("")}</tbody></table>` : `<div class="loading" style="padding:20px">Cargando…</div>`}
-    <div class="btns"><input type="email" name="newEmail" placeholder="mail@empresa.com" style="flex:1;min-width:220px"><button class="btn primary" data-act="member-add">Agregar</button></div>
-    <span class="small muted">Enviales el link de la herramienta: al entrar con ese mail van a ver el proyecto.</span>
+  share: (m) => `<h2>Compartir proyecto</h2><p class="muted small" style="margin:0">Mandale este link a quien quieras sumar. Al abrirlo y entrar con su cuenta, el proyecto aparece en su lista y puede editarlo. Solo el dueño ve el link y quita personas.</p>
+    ${m.members ? `<table class="t"><tbody>${m.members.map((x) => `<tr><td>${esc(x.email || "—")}</td><td class="muted small">${x.role === "owner" ? "Dueño" : "Puede editar"}</td><td style="text-align:right">${x.role !== "owner" && m.isOwner ? `<button class="btn sm ghost danger" data-act="member-remove" data-uid="${esc(x.user_id)}">Quitar</button>` : ""}</td></tr>`).join("")}</tbody></table>` : `<div class="loading" style="padding:20px">Cargando…</div>`}
+    ${m.isOwner ? (m.link ? `<div class="btns"><input type="text" readonly value="${esc(m.link)}" style="flex:1;min-width:220px" data-invite><button class="btn primary" data-act="invite-copy">Copiar link</button></div>
+    <span class="small muted">Si el link llegó a quien no debía, <a href="#" data-act="invite-reset">generá uno nuevo</a>: el anterior deja de funcionar (quienes ya entraron siguen teniendo acceso).</span>` : `<div class="loading" style="padding:12px">Generando link…</div>`) : `<span class="small muted">Para sumar personas, pedíselo al dueño del proyecto.</span>`}
     <div class="btns"><button class="btn ghost" data-act="close">Cerrar</button></div>`,
   project: (m) => `<h2>Nuevo proyecto</h2><label class="f">Nombre<input type="text" name="name" autofocus value="${esc(val(m, "name"))}" placeholder="Ej.: TurnoClaro"></label>
     <label class="f">Idea en una oración<small>Ayudamos a [quién] a resolver [qué problema] mediante [cómo]. Podés completarla después.</small><textarea name="idea">${esc(val(m, "idea"))}</textarea></label>
@@ -523,16 +528,18 @@ function nextCode(prefix, list) { const n = Math.max(0, ...list.map((x) => Numbe
 
 // ---------- acciones ----------
 const ACT = {
-  share: async () => { openModal({ type: "share", members: null }); try { S.modal.members = await S.store.members(S.pid); } catch { S.modal.members = []; } renderModal(); },
-  "member-add": async () => {
-    const email = ($(".modal [name=newEmail]")?.value || "").trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast("Escribí un mail válido.");
-    try { await S.store.addMember(S.pid, email); S.modal.members = await S.store.members(S.pid); renderModal(); toast("Persona agregada."); }
-    catch { toast("Solo el dueño del proyecto puede agregar personas."); }
+  share: async () => {
+    openModal({ type: "share", members: null, link: null, isOwner: false });
+    try { S.modal.members = await S.store.members(S.pid); } catch { S.modal.members = []; }
+    S.modal.isOwner = S.modal.members.some((x) => x.user_id === S.uid && x.role === "owner");
+    renderModal();
+    if (S.modal.isOwner) { try { S.modal.link = await S.store.inviteLink(S.pid); } catch { toast("No se pudo generar el link."); } renderModal(); }
   },
-  "member-remove": async (el) => { try { await S.store.removeMember(S.pid, el.dataset.email); S.modal.members = await S.store.members(S.pid); renderModal(); } catch { toast("Solo el dueño puede quitar personas."); } },
+  "invite-copy": async () => { const v = $(".modal [data-invite]")?.value; try { await navigator.clipboard.writeText(v); toast("Link copiado."); } catch { $(".modal [data-invite]")?.select(); toast("Copialo con Ctrl+C / Cmd+C."); } },
+  "invite-reset": async () => { S.modal.link = null; renderModal(); try { S.modal.link = await S.store.resetInvite(S.pid); toast("Nuevo link generado."); } catch { toast("No se pudo generar el link."); } renderModal(); },
+  "member-remove": async (el) => { try { await S.store.removeMember(S.pid, el.dataset.uid); S.modal.members = await S.store.members(S.pid); renderModal(); } catch { toast("Solo el dueño puede quitar personas."); } },
+  "auth-mode": (el) => { S.authMode = el.dataset.mode; S.loginError = null; render(); },
   logout: async () => { await S.store.sb.auth.signOut(); location.hash = ""; location.reload(); },
-  "login-reset": () => { S.loginSent = null; S.loginError = null; render(); },
   "new-project": () => openModal({ type: "project" }),
   close: () => closeModal(),
   "save-project": async () => {
@@ -675,15 +682,27 @@ document.addEventListener("change", (ev) => {
 document.addEventListener("submit", async (ev) => {
   const f = ev.target.closest("[data-form=login]"); if (!f) return;
   ev.preventDefault();
-  const email = f.email.value.trim(); const btn = f.querySelector("button"); btn.disabled = true;
-  const { error } = await S.store.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-  if (error) { S.loginError = error.code === "email_address_not_authorized" ? "Todavía no podemos enviar mails a esta dirección. Pedile acceso a quien administra la herramienta." : /rate/i.test(error.message) || error.code === "over_email_send_rate_limit" ? "Se enviaron muchos links seguidos. Esperá unos minutos y probá de nuevo." : "No se pudo enviar el link. Revisá el mail e intentá de nuevo."; btn.disabled = false; }
-  else { S.loginSent = email; S.loginError = null; }
+  const email = f.email.value.trim(); const password = f.password.value; const btn = f.querySelector("button"); btn.disabled = true;
+  const auth = S.store.sb.auth;
+  const { data, error } = S.authMode === "signup" ? await auth.signUp({ email, password }) : await auth.signInWithPassword({ email, password });
+  if (error) {
+    const c = error.code || "";
+    S.loginError = c === "invalid_credentials" ? "Mail o contraseña incorrectos." :
+      c === "user_already_exists" || c === "email_exists" ? "Ya hay una cuenta con ese mail. Entrá con tu contraseña." :
+      c === "weak_password" ? "La contraseña es muy débil: usá al menos 8 caracteres." :
+      c === "email_not_confirmed" ? "La cuenta todavía requiere confirmación por mail. Avisale a quien administra la herramienta." :
+      /rate/i.test(error.message) ? "Demasiados intentos seguidos. Esperá un minuto y probá de nuevo." :
+      "No se pudo entrar. Probá de nuevo en un momento.";
+    btn.disabled = false;
+  } else if (S.authMode === "signup" && !data.session) {
+    S.loginError = "La cuenta se creó pero requiere confirmación por mail. Avisale a quien administra la herramienta."; btn.disabled = false;
+  } else { location.reload(); return; }
   render();
 });
 
 window.addEventListener("hashchange", route);
 function route() {
+  if (/^#invitar-/.test(location.hash) && S.store?.kind === "supabase") { location.reload(); return; }
   const r = parseRoute();
   if (r.pid !== S.pid) { if (r.pid) openProject(r.pid); else closeProject(); }
   S.view = r.pid ? r.view : "inicio"; S.sub = r.sub;
@@ -705,6 +724,11 @@ function route() {
     S.sample = supabaseSample(S.store.sb);
     S.downloads = { save: async ({ filename, data }) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type: "text/markdown" })); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return { status: "saved" }; } };
     S.store.sb.auth.onAuthStateChange((ev) => { if (ev === "SIGNED_OUT") location.reload(); });
+    const inv = location.hash.match(/^#invitar-([a-f0-9]+)$/);
+    if (inv) {
+      try { const pid = await S.store.acceptInvite(inv[1]); history.replaceState(null, "", "#p-" + pid); setTimeout(() => toast("Te sumaste al proyecto."), 300); }
+      catch { history.replaceState(null, "", "#inicio"); setTimeout(() => toast("El link de invitación ya no es válido. Pedile uno nuevo al dueño."), 300); }
+    }
   } else {
     const user = await getCapability("user");
     try { S.uid = user ? await user.id() : null; } catch { S.uid = null; }
