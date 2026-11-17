@@ -116,7 +116,7 @@ class SupabaseStore {
   }
   async ensureOwner(pid) {
     if (this.owned.has(pid)) return;
-    const { error } = await this.sb.from("project_members").insert({ project_id: pid, email: this.user.email.toLowerCase(), role: "owner" });
+    const { error } = await this.sb.from("project_members").insert({ project_id: pid, user_id: this.user.id, email: (this.user.email || "").toLowerCase(), role: "owner" });
     if (error && error.code !== "23505" && !/row-level security/i.test(error.message)) throw { code: "invalid_argument", message: error.message };
     this.owned.add(pid);
   }
@@ -140,9 +140,29 @@ class SupabaseStore {
   async add(coll, data) { const id = newId(); await this.set(`${coll}/${id}`, data); return id; }
   remove(path) { return this.q(path, async () => { const { error } = await this.sb.from("docs").delete().eq("path", path); if (error) throw { code: "invalid_argument", message: error.message }; }); }
   // Miembros del proyecto
-  async members(pid) { const { data } = await this.sb.from("project_members").select("email,role").eq("project_id", pid).order("created_at"); return data || []; }
-  async addMember(pid, email) { const { error } = await this.sb.from("project_members").insert({ project_id: pid, email: email.trim().toLowerCase(), role: "editor" }); if (error && error.code !== "23505") throw { code: "invalid_argument", message: error.message }; }
-  async removeMember(pid, email) { const { error } = await this.sb.from("project_members").delete().eq("project_id", pid).eq("email", email); if (error) throw { code: "invalid_argument", message: error.message }; }
+  async members(pid) { const { data } = await this.sb.from("project_members").select("user_id,email,role").eq("project_id", pid).order("created_at"); return data || []; }
+  async removeMember(pid, userId) { const { error } = await this.sb.from("project_members").delete().eq("project_id", pid).eq("user_id", userId); if (error) throw { code: "invalid_argument", message: error.message }; }
+  // Invitaciones por link
+  async inviteLink(pid) {
+    let { data } = await this.sb.from("project_invites").select("token").eq("project_id", pid).order("created_at", { ascending: false }).limit(1);
+    let token = data && data[0] && data[0].token;
+    if (!token) {
+      const r = await this.sb.from("project_invites").insert({ project_id: pid }).select("token").single();
+      if (r.error) throw { code: "invalid_argument", message: r.error.message };
+      token = r.data.token;
+    }
+    return location.origin + location.pathname + "#invitar-" + token;
+  }
+  async resetInvite(pid) {
+    const { error } = await this.sb.from("project_invites").delete().eq("project_id", pid);
+    if (error) throw { code: "invalid_argument", message: error.message };
+    return this.inviteLink(pid);
+  }
+  async acceptInvite(token) {
+    const { data, error } = await this.sb.rpc("accept_invite", { tok: token });
+    if (error) throw { code: "invalid_argument", message: error.message };
+    return data;
+  }
 }
 
 // ---------- Supabase: cliente, sesión y coach ----------

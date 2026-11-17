@@ -2,7 +2,7 @@
 
 Herramienta para construir, cuestionar y validar un modelo de negocio con el Lean Canvas. Es una web estática publicada con **GitHub Pages**. No hace falta cuenta de Claude:
 
-- **Datos y acceso:** viven en **Supabase**. Se entra con el mail, mediante un link mágico, y cada proyecto lo ven solo las personas invitadas.
+- **Datos y acceso:** viven en **Supabase**. Se entra con mail y contraseña (sin mails de verificación) y cada proyecto lo ven solo las personas invitadas con su link.
 - **Coach con IA:** usa la **API de Anthropic** a través de una función de Supabase. La clave queda en el servidor y nunca llega al navegador.
 
 El mismo código también corre como artifact de Claude, si `js/config.js` queda vacío, y en modo local, con los datos guardados en el navegador.
@@ -72,7 +72,7 @@ Hay tres reglas de negocio que el código hace cumplir:
 
 ### Acceso a los datos
 
-- **Quién ve un proyecto:** cada proyecto tiene una lista de miembros, `project_members`. Las políticas de seguridad de la base solo dejan leer y escribir a quienes están en esa lista.
+- **Quién ve un proyecto:** cada proyecto tiene una lista de miembros, `project_members`, atada al usuario y no al mail. Se suma gente con un link de invitación (`project_invites`) que el dueño copia y puede regenerar. Las políticas de seguridad de la base solo dejan leer y escribir a quienes están en esa lista.
 - **Quién lo administra:** quien crea un proyecto queda como dueño y es el único que puede agregar o quitar personas.
 
 ## Capacidades del artifact (modo Claude)
@@ -91,3 +91,7 @@ Fuera de Claude, los datos quedan en el localStorage del navegador y el coach no
 ## Publicar
 
 El artifact se publica desde estos archivos con la herramienta de artifacts de Claude: `index.html`, `css/` y `js/`. Después de un cambio, se vuelve a publicar sobre el mismo artifact.
+
+## Acceso sin mails
+
+En Supabase, Authentication → Sign In / Providers → Email: **Confirm email** apagado. Como el mail no se verifica, el acceso a proyectos se da solo por link de invitación (migración `002_password_and_invites.sql`).
