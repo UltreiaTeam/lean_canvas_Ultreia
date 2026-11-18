@@ -8,7 +8,7 @@
   --evidencia: #1F8A5B; --evidencia-soft: #E2F3EA;
   --decision: #C13B2A; --decision-soft: #FAE6E2;
   --r: 10px;
-  --display: "Fraunces", Georgia, serif; --body: "Inter", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+  --display: "Space Grotesk", system-ui, sans-serif; --body: "Inter", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--body); }
@@ -17,7 +17,7 @@ a { color: var(--brand); }
 .app { display: flex; min-height: 100vh; }
 .side { width: 256px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--line); padding: 24px 14px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .brand { padding: 0 10px 18px; }
-.brand b { font: 600 21px var(--display); display: block; }
+.brand b { font: 700 20px var(--display); letter-spacing: -.3px; display: block; }
 .brand span, .kicker, .group { font: 400 10.5px var(--mono); letter-spacing: 1.2px; color: var(--ink-3); text-transform: uppercase; }
 .group { padding: 16px 10px 6px; }
 .nav { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--ink-2); text-decoration: none; font-size: 14px; border: 0; background: none; width: 100%; text-align: left; cursor: pointer; }
@@ -31,8 +31,8 @@ a { color: var(--brand); }
 .bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 8px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--brand); border-radius: 3px; }
 main { flex: 1; min-width: 0; padding: 40px 48px 80px; max-width: 1240px; }
-h1 { font: 500 40px/1.1 var(--display); margin: 6px 0 10px; letter-spacing: -.3px; }
-h2 { font: 500 26px/1.2 var(--display); margin: 0 0 12px; }
+h1 { font: 600 38px/1.12 var(--display); margin: 6px 0 10px; letter-spacing: -.8px; }
+h2 { font: 600 24px/1.2 var(--display); margin: 0 0 12px; letter-spacing: -.4px; }
 h3 { font: 600 15px var(--body); margin: 0 0 10px; }
 .lead { color: var(--ink-2); font-size: 16px; max-width: 760px; margin: 0 0 24px; }
 .muted { color: var(--ink-2); } .small { font-size: 12.5px; } .mono { font-family: var(--mono); }
@@ -62,7 +62,7 @@ textarea { field-sizing: content; }
 .c-evidencia { color: var(--evidencia); background: var(--evidencia-soft); } .c-decision { color: var(--decision); background: var(--decision-soft); }
 label.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
 label.f small { font-weight: 400; color: var(--ink-3); }
-input[type=text], input[type=email], input[type=date], input[type=number], select, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 400; font-size: 14px; }
+input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], select, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 400; font-size: 14px; }
 textarea { resize: vertical; min-height: 72px; line-height: 1.45; }
 input:focus, select:focus, textarea:focus { outline: 2px solid rgba(30,77,59,.35); outline-offset: 0; border-color: var(--brand); }
 input[readonly], textarea[readonly] { background: var(--paper); color: var(--ink-2); }
@@ -111,7 +111,7 @@ table.t { width: 100%; border-collapse: collapse; background: var(--surface); bo
 .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 .ficha-card { cursor: pointer; display: flex; flex-direction: column; gap: 8px; min-height: 150px; text-align: left; }
 .ficha-card:hover { border-color: var(--ink-3); }
-.ficha-card .name { font: 500 22px var(--display); }
+.ficha-card .name { font: 600 21px var(--display); }
 /* Coach */
 .coach { border: 1px solid #DCCFF3; background: #FBF9FF; border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; }
 .coach .ttl { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ejemplo); }
