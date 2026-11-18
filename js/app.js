@@ -16,6 +16,7 @@ const ICON = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   canvas: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 15h18M9 4v11M15 4v11M12 4v11"/>',
   flask: '<path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
   test: '<path d="M4 4h16v6H4zM4 14h16v6H4z"/><path d="M8 7h.01M8 17h.01"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.6L20 8"/><path d="M20 3v5h-5"/>',
   flag: '<path d="M5 21V4h11l-2 4 2 4H5"/>',
@@ -170,6 +171,7 @@ function sidebar() {
     ${item("aprendizajes", "Iteración", "refresh", "05")}
     ${item("plan", "Plan de acción", "flag", "06")}
     ${S.store.kind === "supabase" ? `<button class="nav" data-act="share">${icon("folder")}<span>Compartir proyecto</span></button>` : ""}
+    <button class="nav" data-act="delete-project" style="color:var(--decision)">${icon("trash")}<span>Eliminar proyecto</span></button>
     <div class="spacer"></div>
     ${S.store.kind === "supabase" ? `<div class="small muted" style="padding:8px 10px">${esc(S.email || "")} · <a href="#" data-act="logout">Salir</a></div>` : ""}
     ${ready() && S.P.project ? `<div class="status-card"><b>${esc(S.P.project.name)} · ${esc(currentVersion()?.label || "v0")}</b>${H.length} hipótesis · ${val} validadas<div class="bar"><i style="width:${pr ? Math.round((pr.count / 6) * 100) : 0}%"></i></div></div>` : ""}
@@ -480,6 +482,12 @@ const MODAL = {
     ${m.isOwner ? (m.link ? `<div class="btns"><input type="text" readonly value="${esc(m.link)}" style="flex:1;min-width:220px" data-invite><button class="btn primary" data-act="invite-copy">Copiar link</button></div>
     <span class="small muted">Si el link llegó a quien no debía, <a href="#" data-act="invite-reset">generá uno nuevo</a>: el anterior deja de funcionar (quienes ya entraron siguen teniendo acceso).</span>` : `<div class="loading" style="padding:12px">Generando link…</div>`) : `<span class="small muted">Para sumar personas, pedíselo al dueño del proyecto.</span>`}
     <div class="btns"><button class="btn ghost" data-act="close">Cerrar</button></div>`,
+  "delete-project": (m) => m.isOwner === null ? `<div class="loading" style="padding:20px">Cargando…</div>` : m.isOwner ? `<h2>Eliminar proyecto</h2>
+    <p style="margin:0">Se borra <b>${esc(m.name)}</b> con todas sus versiones, hipótesis, experimentos y aprendizajes, para vos y para las personas con las que lo compartiste. No se puede deshacer.</p>
+    <label class="f">Para confirmar, escribí el nombre del proyecto<input type="text" name="confirmName" autocomplete="off" placeholder="${esc(m.name)}"></label>
+    <div class="btns"><button class="btn primary" style="background:var(--decision);border-color:var(--decision)" data-act="delete-project-confirm">Eliminar definitivamente</button><button class="btn ghost" data-act="close">Cancelar</button></div>`
+    : `<h2>Salir del proyecto</h2><p style="margin:0">Solo el dueño puede eliminar <b>${esc(m.name)}</b>. Si salís, deja de aparecer en tu lista y no vas a poder entrar salvo que te vuelvan a invitar.</p>
+    <div class="btns"><button class="btn primary" data-act="leave-project-confirm">Salir del proyecto</button><button class="btn ghost" data-act="close">Cancelar</button></div>`,
   project: (m) => `<h2>Nuevo proyecto</h2><label class="f">Nombre<input type="text" name="name" autofocus value="${esc(val(m, "name"))}" placeholder="Ej.: TurnoClaro"></label>
     <label class="f">Idea en una oración<small>Ayudamos a [quién] a resolver [qué problema] mediante [cómo]. Podés completarla después.</small><textarea name="idea">${esc(val(m, "idea"))}</textarea></label>
     <div class="btns"><button class="btn primary" data-act="save-project">Crear proyecto</button><button class="btn ghost" data-act="close">Cancelar</button></div>`,
@@ -534,6 +542,25 @@ const ACT = {
     S.modal.isOwner = S.modal.members.some((x) => x.user_id === S.uid && x.role === "owner");
     renderModal();
     if (S.modal.isOwner) { try { S.modal.link = await S.store.inviteLink(S.pid); } catch { toast("No se pudo generar el link."); } renderModal(); }
+  },
+  "delete-project": async () => {
+    const name = S.P?.project?.name || "este proyecto";
+    openModal({ type: "delete-project", name, isOwner: S.store.kind === "supabase" ? null : true });
+    if (S.store.kind === "supabase") { try { S.modal.isOwner = await S.store.isOwner(S.pid); } catch { S.modal.isOwner = false; } renderModal(); }
+  },
+  "delete-project-confirm": async () => {
+    const typed = ($(".modal [name=confirmName]")?.value || "").trim().toLowerCase();
+    if (typed !== (S.modal.name || "").trim().toLowerCase()) return toast("El nombre no coincide.");
+    const pid = S.pid;
+    try {
+      if (S.store.kind === "supabase") await S.store.deleteProject(pid);
+      else await S.store.update(`projects/${pid}`, { archived: true });
+      S.modal = null; location.hash = "#inicio"; toast("Proyecto eliminado.");
+    } catch { toast("No se pudo eliminar. Probá de nuevo."); }
+  },
+  "leave-project-confirm": async () => {
+    try { await S.store.leaveProject(S.pid); S.modal = null; location.hash = "#inicio"; toast("Saliste del proyecto."); }
+    catch { toast("No se pudo salir del proyecto."); }
   },
   "invite-copy": async () => { const v = $(".modal [data-invite]")?.value; try { await navigator.clipboard.writeText(v); toast("Link copiado."); } catch { $(".modal [data-invite]")?.select(); toast("Copialo con Ctrl+C / Cmd+C."); } },
   "invite-reset": async () => { S.modal.link = null; renderModal(); try { S.modal.link = await S.store.resetInvite(S.pid); toast("Nuevo link generado."); } catch { toast("No se pudo generar el link."); } renderModal(); },
