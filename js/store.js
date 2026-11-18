@@ -158,6 +158,12 @@ class SupabaseStore {
     if (error) throw { code: "invalid_argument", message: error.message };
     return this.inviteLink(pid);
   }
+  async isOwner(pid) {
+    const { data } = await this.sb.from("project_members").select("role").eq("project_id", pid).eq("user_id", this.user.id).maybeSingle();
+    return data?.role === "owner";
+  }
+  async deleteProject(pid) { const { error } = await this.sb.rpc("delete_project", { pid }); if (error) throw { code: "invalid_argument", message: error.message }; }
+  async leaveProject(pid) { const { error } = await this.sb.rpc("leave_project", { pid }); if (error) throw { code: "invalid_argument", message: error.message }; }
   async acceptInvite(token) {
     const { data, error } = await this.sb.rpc("accept_invite", { tok: token });
     if (error) throw { code: "invalid_argument", message: error.message };
